@@ -1,0 +1,483 @@
+
+:numbered!:
+
+[appendix]
+[[_migration]]
+== Migration Guides
+
+=== Migrating from CometD 2 to CometD 3
+
+==== Required JDK Version Changes
+
+[cols="1,1", options="header"]
+|===
+| CometD 2 | CometD 3
+| JDK 5    | JDK 7
+|===
+
+==== Servlet Specification Changes
+
+[cols="1,1", options="header"]
+|===
+| CometD 2 | CometD 3
+| Servlet 2.5 | Servlet 3.0 (recommended Servlet 3.1 with JSR 356's `javax.websocket` support)
+|===
+
+==== Class Names Changes
+
+Package names did not change.
+
+[cols="1,1", options="header"]
+|===
+| CometD 2 | CometD 3
+| CometdServlet | CometDServlet
+| AnnotationCometdServlet | AnnotationCometDServlet
+|===
+
+NOTE: Pay attention to the capital `D' of Comet**D**
+
+==== Maven Artifacts Changes
+
+Only the WebSocket artifacts have changed.
+
+[cols="1,1", options="header"]
+|===
+| CometD 2
+| CometD 3
+
+| `org.cometd.java:cometd-websocket-jetty`
+| `org.cometd.java:cometd-java-websocket-javax-server` (JSR 356 WebSocket Server)
+| `org.cometd.java:cometd-java-websocket-jetty-server` (Jetty WebSocket Server)
+| `org.cometd.java:cometd-java-websocket-javax-client` (JSR 356 WebSocket Client)
+| `org.cometd.java:cometd-java-websocket-jetty-client` (Jetty WebSocket Client)
+|===
+
+==== `web.xml` Changes
+
+[cols="1a,1a", options="header"]
+|===
+| CometD 2
+| CometD 3
+
+|
+====
+[source,xml]
+----
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd"
+         version="2.5">
+    ...
+    <servlet>
+        <servlet-name>cometd</servlet-name>
+        <servlet-class>org.cometd.server.CometdServlet</servlet-class>
+    </servlet>
+    ...
+</web-app>
+----
+====
+
+|
+====
+[source,xml]
+----
+<web-app xmlns="http://java.sun.com/xml/ns/javaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd" <1>
+         version="3.0"> <2>
+    ...
+    <servlet>
+        <servlet-name>cometd</servlet-name>
+        <servlet-class>org.cometd.server.CometDServlet</servlet-class>
+        <load-on-startup>1</load-on-startup> <3>
+        <async-supported>true</async-supported> <4>
+    </servlet>
+</web-app>
+----
+====
+<1> `schemaLocation` attribute changed from `2.5` to `3.0` (or to `3.1`)
+<2> `version` attribute changed from `2.5` to `3.0` (or to `3.1`)
+<3> `load-on-startup` element now required
+<4> `async-supported` element now required
+|===
+
+[NOTE]
+====
+The `load-on-startup` element is now required in order to use the `websocket` transport,
+unless Spring is used to configure the `BayeuxServer` object (see
+<<_java_server_services_integration_spring_xml_based_spring_configuration,this section>>).
+If `load-on-startup` is not specified, the first request will lazily start the CometD Servlet,
+which will start the `BayeuxServer` object, which will configure the `websocket` transport, but
+at this point it is too late for the `websocket` transport to handle the request, which will be
+handled by the next transport (typically the `long-polling` transport).
+====
+
+==== CometD Servlet Parameters Changes
+
+[cols="1,1,10", options="header"]
+|===
+| CometD 2
+| CometD 3
+| Notes
+
+| `logLevel`
+|
+| The parameter has been removed in CometD 3. +
+  In CometD 3 logging levels are controlled by the logging framework
+  implementation (for example, Log4J2).
+
+| `transports`
+| `transports`
+| The parameter changed its meaning. +
+  In CometD 2 it is a comma separated list of class names of _additional_
+  server transports. In CometD 3 it is a comma separated list of the server
+  transports. +
+  For example, in CometD 3
+  `transports="org.cometd.websocket.server.JettyWebSocketTransport"`
+  defines just one server transport: a `websocket` server transport based on
+  Jetty WebSocket APIs.
+
+|
+| `ws.cometdURLMapping`
+| A new, *mandatory*, parameter for WebSocket server transports. +
+  It's a comma separated list of the `url-pattern` strings defined by the
+  `servlet-mapping` of the CometD Servlet, for example `+/cometd/*+`.
+|===
+
+==== Method Signature Changes
+
+[cols="1a,1a", options="header"]
+|===
+| CometD 2
+| CometD 3
+
+| `BayeuxServer`::
+    `createIfAbsent(String, ConfigurableServerChannel.Initializer...)`
+| `BayeuxServer`::
+    `create**Channel**IfAbsent(String, ConfigurableServerChannel.Initializer...)`
+
+| `BayeuxServer.SessionListener`::
+    `sessionAdded(ServerSession)`
+| `BayeuxServer.SessionListener`::
+    `sessionAdded(ServerSession, *ServerMessage*)`
+
+| `BayeuxServer.SubscriptionListener`::
+    `subscribed(ServerSession, ServerChannel)`
+| `BayeuxServer.SubscriptionListener`::
+    `subscribed(ServerSession, ServerChannel, *ServerMessage*)`
+
+| `BayeuxServer.SubscriptionListener`::
+    `unsubscribed(ServerSession, ServerChannel)`
+| `BayeuxServer.SubscriptionListener`::
+    `unsubscribed(ServerSession, ServerChannel, *ServerMessage*)`
+
+| `ServerChannel`::
+    `publish(Session, Object, *String*)`
+| `ServerChannel`::
+    `publish(Session, Object)`
+
+| `ServerChannel.SubscriptionListener`::
+    `subscribed(ServerSession, ServerChannel)`
+| `ServerChannel.SubscriptionListener`::
+    `subscribed(ServerSession, ServerChannel, *ServerMessage*)`
+
+| `ServerChannel.SubscriptionListener`::
+    `unsubscribed(ServerSession, ServerChannel)`
+| `ServerChannel.SubscriptionListener`::
+    `unsubscribed(ServerSession, ServerChannel, *ServerMessage*)`
+
+| `ServerSession`::
+    `deliver(Session, String, Object, *String*)`
+| `ServerSession`::
+    `deliver(Session, String, Object)`
+
+| `MaxQueueListener`::
+    `queueMaxed(ServerSession, Session, Message)`
+| `MaxQueueListener`::
+    `queueMaxed(ServerSession, *Queue<ServerMessage>*, *ServerSession*, *Message*)`
+|===
+
+==== Inherited Services Service Method Signature Changes
+
+[cols="1a,1a", options="header"]
+|===
+| CometD 2
+| CometD 3
+
+| `class MyService extends AbstractService`::
+    `myMethod(ServerSession, [String], Object, [String])`
+| `class MyService extends AbstractService`::
+    `myMethod(ServerSession, *ServerMessage*)`
+|===
+
+[[_migration_30_to_31]]
+=== Migrating from CometD 3.0 to CometD 3.1
+
+Migration from CometD 3.0.x to CometD 3.1.x should be very easy, and most of the
+times just matter of updating the CometD version with no further changes to the
+application or the configuration.
+
+Below you can find the detailed list of the changes introduced in CometD 3.1.x.
+
+==== API Behavior Changes
+
+The handshake operation will now throw an exception if executed multiple times
+without explicitly disconnecting in-between.
+
+Handshaking should be performed only once, and applications should enforce this
+by using once events such as `DOMContentLoaded`, or by guarding the handshake
+with a `boolean` field.
+For further information, see
+<<_javascript_handshake,the JavaScript handshake section>> or the
+<<_java_client_handshake,the Java client handshake section>>.
+
+==== Binary Data
+
+CometD now allows to send/receive messages with binary data, see
+<<_concepts_binary_data,the binary data section>>.
+
+==== Message Processing Order Changes
+
+The processing of incoming messages has slightly changed, affecting only writers
+of custom extensions (implementations of `BayeuxServer.Extension` or
+`ServerSession.Extension`).
+
+Previous behavior was to invoke `BayeuxServer.Extension.send(...)` and
+`ServerSession.Extension.send(...)` for both broadcast and service messages
+_before_ invoking the `ServerChannel.MessageListener` listeners.
+
+CometD 3.1.x behavior is to invoke `BayeuxServer.Extension.send(...)` and
+`ServerSession.Extension.send(...)` only for broadcast messages _after_
+invoking the `ServerChannel.MessageListener` listeners.
+
+==== HTTP/2 Support
+
+CometD applications are typically independent of the transport used to send or
+receive messages.
+
+However, if the transport is HTTP/2, CometD can be configured to take advantage
+of the HTTP/2 transport by removing the limit on the number of outstanding long
+polls, see the `http2MaxSessionsPerBrowser` parameter below.
+
+Where before a CometD applications opened in multiple browser tabs only had one
+tab performing the long poll (and all the other tabs performing a normal poll),
+now with HTTP/2 it is possible to remove this limitation and have all the tabs
+performing the long poll.
+
+==== CometD Servlet Parameters Changes
+
+[cols="1,1,10a", options="header"]
+|===
+| CometD 3.0.x
+| CometD 3.1.x
+| Notes
+
+| allowMultiSessionsNoBrowser
+|
+| Removed
+
+|
+| maxProcessing
+| Added, see <<_java_server_configuration,the server configuration section>>
+
+|
+| http2MaxSessionsPerBrowser
+| Added, see <<_java_server_configuration,the server configuration section>>
+
+|
+| ws.enableExtension.<extension_name>
+| Added, see <<_java_server_configuration,the server configuration section>>
+|===
+
+==== CometD APIs Additions
+
+* `org.cometd.bayeux.BinaryData`, to support <<_concepts_binary_data,binary data>>.
+* `boolean BayeuxServer.removeSession(ServerSession session)`
+* `void ClientSession.remoteCall(String target, Object data, MessageListener callback)`
+
+=== JavaScript Implementation Changes
+
+The JavaScript implementation now supports two more bindings, for
+https://angularjs.org/[Angular 1] (Angular 2 not supported yet)
+and for _vanilla_ JavaScript (i.e. plain JavaScript without frameworks or
+other libraries).
+
+The JavaScript implementation is now available via https://www.npmjs.com/[NPM]
+and https://bower.io/[Bower], and compatible with both CommonJS modules and
+AMD modules.
+
+The location of the JavaScript files has changed when explicitly referenced.
+For applications built with Maven using the overlay WARs, the JavaScript files
+location has changed:
+
+[cols="1a,1a", options="header"]
+|===
+| CometD 3.0.x
+| CometD 3.1.x
+
+|
+----
+org/
+  cometd.js
+  cometd/
+    AckExtension.js
+    ReloadExtension.js
+    TimeStampExtension.js
+    TimeSyncExtension.js
+----
+|
+----
+js/
+  cometd/
+    cometd.js
+    AckExtension.js
+    BinaryExtension.js
+    ReloadExtension.js
+    TimeStampExtension.js
+    TimeSyncExtension.js
+----
+|===
+
+Applications should be changed accordingly:
+
+[cols="1a,1a", options="header"]
+|===
+| CometD 3.0.x
+| CometD 3.1.x
+
+|
+====
+[source,html]
+[subs=+quotes]
+.index.html
+----
+<!-- CometD 3.0.x with WAR overlays. -->
+<script type="text/javascript" src="**org/**cometd.js"></script>
+----
+====
+|
+====
+[source,html]
+[subs=+quotes]
+.index.html
+----
+<!-- CometD 3.1.x with WAR overlays. -->
+<script type="text/javascript" src="**js/cometd/**cometd.js"></script>
+----
+====
+
+|
+====
+[source,javascript]
+[subs=+quotes]
+.application.js
+----
+/// CometD 3.0.x with AMD.
+require({
+        baseUrl: 'js/jquery',
+        paths: {
+            jquery: 'jquery-2.2.4',
+            *org: '../org'*
+        }
+    },
+    ['jquery','jquery.cometd'],
+    function($, cometd) {
+        ...
+    });
+----
+====
+|
+====
+[source,javascript]
+[subs=+quotes]
+.application.js
+----
+/// CometD 3.1.x with AMD.
+require({
+        baseUrl: "js/jquery",
+        paths: {
+            jquery: "jquery-3.3.1",
+            *cometd: "../cometd"*
+        }
+    },
+    ['jquery','jquery.cometd'],
+    function($, cometd) {
+        ...
+    });
+----
+====
+|===
+
+The <<_extensions_reload,reload extension>> has been rewritten to use the
+`SessionStorage` rather than using short-lived cookies.
+
+Two new APIs are available to simplify sending messages with binary data:
+
+* `cometd.publishBinary(channel, data, last, meta, callback)`
+* `cometd.remoteCallBinary(target, data, last, meta, timeout, callback)`
+
+==== Jetty WebSocket Server Transport Requirements
+
+Server side applications that want to make use of the Jetty WebSocket server
+transport are now required to use Jetty versions:
+
+* `9.2.20.v20161216` or later in the 9.2.x series (requires JDK 7)
+* `9.3.15.v20161220` or later in the 9.3.x series (requires JDK 8)
+* `9.4.0.v20161208` or later in the 9.4.x series (requires JDK 8)
+
+Application that use the default JSR 356 transport or that do not use WebSocket
+can work with any Jetty version.
+
+[[_migration_31_to_40]]
+=== Migrating from CometD 3.1 to CometD 4.0
+
+==== Required JDK Version Changes
+
+[cols="1,1", options="header"]
+|===
+| CometD 3.1 | CometD 4.0
+| JDK 7      | JDK 8
+|===
+
+==== Jetty Dependency Changes
+
+[cols="1,1", options="header"]
+|===
+| CometD 3.1  | CometD 4.0
+| Jetty 9.2.x | Jetty 9.4.x
+|===
+
+==== Breaking API Changes
+
+In CometD 3.1.x `BayeuxContext` was stored to and retrieved from a `ThreadLocal`
+because the threading model was synchronous and therefore it allowed `ThreadLocal`
+to be used to provide access to `BayeuxContext` from `BayeuxServer`.
+
+In CometD 4.0.x the APIs allow for an asynchronous threading model and
+therefore `ThreadLocal` cannot be used anymore.
+For this reason, access to `BayeuxContext` has been moved to `ServerMessage`.
+
+[cols="1,1", options="header"]
+|===
+| CometD 3.1 | CometD 4.0
+| BayeuxServer.getContext() | ServerMessage.getBayeuxContext()
+| BayeuxServer.getCurrentTransport() | ServerMessage.getServerTransport(), ServerSession.getServerTransport()
+| ServerTransport.getContext() | ServerMessage.getBayeuxContext()
+|===
+
+==== Deprecated API Removed
+
+In `OortMap` and `OortList`, a number of deprecated (since 3.0.x) blocking APIs
+have been removed. Use the non-blocking variant of the same APIs.
+
+[cols="1,1", options="header"]
+|===
+| CometD 3.1 | CometD 4.0
+| OortMap.putAndShare(K key, V value) | OortMap.putAndShare(K key, V value, Result<V> callback)
+| OortMap.putIfAbsentAndShare(K key, V value) | OortMap.putIfAbsentAndShare(K key, V value, Result<V> callback)
+| OortMap.removeAndShare(K key) | OortMap.removeAndShare(K key, Result<V> callback)
+| OortList.addAndShare(E... elements) | OortList.addAndShare(Result<Boolean> callback, E... elements)
+| OortList.removeAndShare(E... elements) | OortList.removeAndShare(Result<Boolean> callback, E... elements)
+|===
+
+:numbered:
