@@ -51,6 +51,7 @@ public class WebSocketEndPoint extends Endpoint implements MessageHandler.Whole<
 
     @Override
     public void onMessage(String data) {
+		System.err.println("-------------------- Message received - " + data);
         if (_logger.isDebugEnabled()) {
             _logger.debug("WebSocket Text message on {}@{}",
                     getClass().getSimpleName(),
@@ -61,11 +62,15 @@ public class WebSocketEndPoint extends Endpoint implements MessageHandler.Whole<
                 Promise.Completable<Void> completable = new Promise.Completable<>();
                 _delegate.onMessage(data, completable);
                 // Cannot return from this method until the processing is finished.
+				System.err.println("-------------------- Message received waiting");
                 completable.get();
+				System.err.println("-------------------- Message received done waiting");
             } catch (ExecutionException x) {
+				System.err.println("-------------------- Message received exception - " + x);
                 throw x.getCause();
             }
         } catch (Throwable failure) {
+			System.err.println("-------------------- Message received exception foo - " + failure);
             if (_logger.isDebugEnabled()) {
                 _logger.debug("", failure);
             }

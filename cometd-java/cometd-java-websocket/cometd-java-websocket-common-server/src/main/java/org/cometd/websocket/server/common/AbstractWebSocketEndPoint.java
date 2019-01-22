@@ -60,7 +60,8 @@ public abstract class AbstractWebSocketEndPoint {
     public abstract void close(int code, String reason);
 
     public void onMessage(String data, Promise<Void> p) {
-        Promise<Void> promise = Promise.from(p::succeed, failure -> {
+        Promise<Void> promise = Promise.from(x -> { System.err.println(">>>>>>> success on message " + x); p.succeed(x); }, failure -> {
+			System.err.println(">>>>>>> failure on message " + failure);
             if (_logger.isDebugEnabled()) {
                 _logger.debug("", failure);
             }
@@ -70,6 +71,7 @@ public abstract class AbstractWebSocketEndPoint {
 
         try {
             ServerMessage.Mutable[] messages = _transport.parseMessages(data);
+			System.err.println(">>>>>>> Parsing messages - " + messages.length);
             if (_logger.isDebugEnabled()) {
                 _logger.debug("Parsed {} messages", messages == null ? -1 : messages.length);
             }
@@ -132,20 +134,27 @@ public abstract class AbstractWebSocketEndPoint {
                 session.setAllowMessageDeliveryDuringHandshake(_transport.isAllowMessageDeliveryDuringHandshake());
             } else {
                 session = _session;
+				System.err.println(">>>>>>> processMessages 0");
                 if (session == null) {
+					System.err.println(">>>>>>> processMessages 1");
                     if (!_transport.isRequireHandshakePerConnection()) {
+						System.err.println(">>>>>>> processMessages 2");
                         session = _session = (ServerSessionImpl)_transport.getBayeux().getSession(m.getClientId());
+						System.err.println(">>>>>>> processMessages 3");
                     }
                 } else if (_transport.getBayeux().getSession(session.getId()) == null) {
+					System.err.println(">>>>>>> processMessages 4");
                     session = _session = null;
                 }
             }
 
             Context context = new Context(session);
+			System.err.println(">>>>>>> processMessages 5");
             AsyncFoldLeft.run(messages, true, (result, message, loop) -> {
                         processMessage(messages, context, (ServerMessageImpl)message, Promise.from(b -> loop.proceed(result && b), loop::fail));
                     },
                     Promise.from(flush -> {
+						System.err.println(">>>>>>> processMessages 6 - " + flush);
                         if (flush) {
                             flush(context, promise);
                         } else {
@@ -177,7 +186,9 @@ public abstract class AbstractWebSocketEndPoint {
                 break;
             }
             case Channel.META_CONNECT: {
+				System.err.println(">>>>>>> handling meta connet");
                 processMetaConnect(context, message, Promise.from(proceed -> {
+					System.err.println(">>>>>>> handling meta connet done");
                     if (proceed) {
                         resume(context, message, Promise.from(y -> promise.succeed(true), promise::fail));
                     } else {
@@ -214,20 +225,27 @@ public abstract class AbstractWebSocketEndPoint {
         // Remember the connected status before handling the message.
         ServerSessionImpl session = context.session;
         boolean wasConnected = session != null && session.isConnected();
+		System.err.println(">>>>>>> processMetaConnect 1");
         _transport.getBayeux().handle(session, message, Promise.from(reply -> {
+			System.err.println(">>>>>>> processMetaConnect 2");
             boolean proceed = true;
             if (session != null) {
                 boolean maySuspend = !session.shouldSchedule();
                 boolean metaConnectDelivery = _transport.isMetaConnectDeliveryOnly() || session.isMetaConnectDeliveryOnly();
+				System.err.println(">>>>>>> processMetaConnect 3 - " + reply.isSuccessful());
                 if ((maySuspend || !metaConnectDelivery) && reply.isSuccessful()) {
                     long timeout = session.calculateTimeout(_transport.getTimeout());
+					System.err.println(">>>>>>> processMetaConnect 4");
                     if (timeout > 0 && wasConnected && session.isConnected()) {
+						System.err.println(">>>>>>> processMetaConnect 5");
                         AbstractServerTransport.Scheduler scheduler = suspend(context, message, timeout);
                         session.setScheduler(scheduler);
                         proceed = false;
                     }
                 }
+				System.err.println(">>>>>>> processMetaConnect 6");
                 if (proceed && session.isDisconnected()) {
+					System.err.println(">>>>>>> processMetaConnect 7");
                     reply.getAdvice(true).put(Message.RECONNECT_FIELD, Message.RECONNECT_NONE_VALUE);
                 }
             }
@@ -282,13 +300,18 @@ public abstract class AbstractWebSocketEndPoint {
             _logger.debug("Flushing {}, replies={}, messages={}", session, context.replies, msgs);
         }
         List<ServerMessage> messages = msgs;
+		System.err.println(">>>>>>> flushing");
         boolean queued = flusher.queue(new Entry(context, messages, Promise.from(y -> {
+			System.err.println(">>>>>>> done flushing");
             promise.succeed(null);
             writeComplete(context, messages);
-        }, promise::fail)));
+        }, x -> { System.err.println(">>>>>>> error flushing - " + x); promise.fail(x); })));
         if (queued) {
+			System.err.println(">>>>>>> iterate 1");
             flusher.iterate();
+			System.err.println(">>>>>>> iterate 2");
         }
+		System.err.println(">>>>>>> flushing end method");
     }
 
     protected void writeComplete(Context context, List<ServerMessage> messages) {
@@ -386,9 +409,13 @@ public abstract class AbstractWebSocketEndPoint {
 
         private boolean queue(Entry entry) {
             Throwable failure;
+			System.err.println(">>>>>>> queue 1 - " + _state);
             synchronized (this) {
+				System.err.println(">>>>>>> queue 2");
                 failure = _failure;
+				System.err.println(">>>>>>> queue 3");
                 if (failure == null) {
+					System.err.println(">>>>>>> queue 4");
                     return _entries.offer(entry);
                 }
             }
@@ -401,15 +428,18 @@ public abstract class AbstractWebSocketEndPoint {
 
         @Override
         protected Action process() {
+			System.err.println(">>>>>>> process 1");
             while (true) {
                 switch (_state) {
                     case IDLE: {
+						System.err.println(">>>>>>> process idle 1");
                         synchronized (this) {
                             _entry = _entries.poll();
                         }
                         if (_logger.isDebugEnabled()) {
                             _logger.debug("Processing {}", _entry);
                         }
+						System.err.println(">>>>>>> process idle 2 - " + _entry);
                         if (_entry == null) {
                             return Action.IDLE;
                         }
@@ -418,6 +448,7 @@ public abstract class AbstractWebSocketEndPoint {
                         break;
                     }
                     case HANDSHAKE: {
+						System.err.println(">>>>>>> process handshake");
                         _state = State.MESSAGES;
                         List<ServerMessage.Mutable> replies = _entry._context.replies;
                         if (!replies.isEmpty()) {
@@ -443,6 +474,7 @@ public abstract class AbstractWebSocketEndPoint {
                         break;
                     }
                     case MESSAGES: {
+						System.err.println(">>>>>>> process messages");
                         List<ServerMessage> messages = _entry._queue;
                         int size = messages.size();
                         if (_messageIndex < size) {
@@ -475,6 +507,7 @@ public abstract class AbstractWebSocketEndPoint {
                         break;
                     }
                     case REPLIES: {
+						System.err.println(">>>>>>> process replies");
                         List<ServerMessage.Mutable> replies = _entry._context.replies;
                         int size = replies.size();
                         if (_replyIndex < size) {
@@ -502,6 +535,7 @@ public abstract class AbstractWebSocketEndPoint {
                         break;
                     }
                     case COMPLETE: {
+						System.err.println(">>>>>>> process complete");
                         Entry entry = _entry;
                         _state = State.IDLE;
                         // Do not keep the buffer around while we are idle.
@@ -521,6 +555,7 @@ public abstract class AbstractWebSocketEndPoint {
 
         @Override
         protected void onCompleteFailure(Throwable x) {
+			System.err.println(">>>>>>> onCompleteFailure - " + x);
             Entry entry;
             synchronized (this) {
                 _failure = x;

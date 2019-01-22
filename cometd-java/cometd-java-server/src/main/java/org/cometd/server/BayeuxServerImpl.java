@@ -612,6 +612,7 @@ public class BayeuxServerImpl extends AbstractLifeCycle implements BayeuxServer,
     }
 
     public void handle(ServerSessionImpl session, ServerMessage.Mutable message, Promise<ServerMessage.Mutable> promise) {
+		System.err.println("========== message got to here");
         ServerMessageImpl reply = (ServerMessageImpl)createReply(message);
         if (_validation) {
             String error = validateMessage(message);
