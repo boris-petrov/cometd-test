@@ -98,12 +98,14 @@ public class WebSocketEndPoint extends Endpoint implements MessageHandler.Whole<
 
         @Override
         protected void send(ServerSession session, String data, Callback callback) {
+			System.err.println("WebSocketEndPoint.Delegate.send 1");
             if (_logger.isDebugEnabled()) {
                 _logger.debug("Sending {}", data);
             }
             // Async write.
             _wsSession.getAsyncRemote().sendText(data, result -> {
                 Throwable failure = result.getException();
+				System.err.println("WebSocketEndPoint.Delegate.send 2 - " + failure);
                 if (failure == null) {
                     callback.succeeded();
                 } else {
